@@ -16,19 +16,23 @@ use std::env;
 use dotenv::dotenv;
 
 pub mod dice;
+pub mod admin;
 use crate::dice::DiceBot;
+use crate::admin::AdminBot;
 
 struct CommandBot {
     client: Client,
     username: String,
+    admin: AdminBot,
 }
 
 impl CommandBot {
     pub fn new(client: Client, username: String) -> Self {
-        Self { client, username }
+    	let admin = AdminBot::new(env::var("ADMIN_USERS").unwrap());
+        Self { client, username, admin }
     }
 
-    fn process_msg(msg_body: String) -> String {
+    fn process_msg(&self, msg_body: String, user: String) -> String {
         if !msg_body.get(..2).is_some() {
             return "".to_string()
         }
@@ -50,6 +54,9 @@ impl CommandBot {
         },
         "roll" => {
          	DiceBot::roll(rest)
+        },
+        "admin" => {
+        	self.admin.admin(rest, user)
         }
         _ => "".to_string(),
     };
@@ -81,7 +88,7 @@ impl EventEmitter for CommandBot {
             if name == self.username {
                 return;
             }
-            let response = CommandBot::process_msg(msg_body);
+            let response = self.process_msg(msg_body, name);
             if response != "" {
                 let content = AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(response,
                 ));
