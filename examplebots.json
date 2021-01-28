@@ -1,0 +1,23 @@
+# this goes into bots.json
+# without the comments
+[
+	{
+		"name": "example",
+		"commands": [
+			{
+				"name": "print",
+				"sudo": false,
+				"exec": "echo",
+				"need_user": false,
+				"param_count": 1,
+			},
+			{
+				"name": "reboot",
+				"sudo": true,
+				"exec": "reboot",
+				"need_user": false,
+				"param_count": 0,
+			}
+		]
+	}
+]

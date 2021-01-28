@@ -12,6 +12,8 @@ matrix-sdk = { version = "*", path ="../matrix-rust-sdk/matrix_sdk/" }
 tokio = { version = "1.0.2", features = ["full", "time"] }
 url = "*"
 
-#eigene Programmierung für Bot
-rand = "*"
+#eigene Programmierung für Bots
 dotenv = "*"
+rand = "*"
+serde = "*"
+serde_json = "*"

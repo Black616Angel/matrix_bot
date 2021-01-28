@@ -16,6 +16,7 @@ impl AdminBot {
 			return "Not allowed 😠".to_string()
 		}
 
+		//get keywords and other stuff from user message
 		let keyword: &str;
 		let rest: &str;
 		if message.contains(" ") {
@@ -43,6 +44,8 @@ impl AdminBot {
 		ret
 	}
 	fn reboot(&self) -> String {
+
+		//build the command and ignore the output, we don't need that...
 		let err = Command::new("sudo").args(&["shutdown", "-r", "-t", "sec", "5"]).spawn();
 		if err.is_err() {
 			return "rebooting didn't work...".to_string()
@@ -51,6 +54,7 @@ impl AdminBot {
 		}
 	}
 	fn ts3(&self, arg: &str) -> String {
+		//here we want the output, so we get it
 		let err = Command::new("sudo").args(&["-u", "ts3", "/home/ts3/teamspeak3-server_linux_amd64/ts3server_startscript.sh", arg]).output();
 		if err.is_err() {
 			return "now that didn't work...".to_string()

@@ -17,37 +17,57 @@ use dotenv::dotenv;
 
 pub mod dice;
 pub mod admin;
+pub mod cbot;
 use crate::dice::DiceBot;
 use crate::admin::AdminBot;
+use crate::cbot::CustomBot;
 
 struct CommandBot {
     client: Client,
     username: String,
     admin: AdminBot,
+	custombots: Vec<CustomBot>,
 }
 
 impl CommandBot {
     pub fn new(client: Client, username: String) -> Self {
-    	let admin = AdminBot::new(env::var("ADMIN_USERS").unwrap());
-        Self { client, username, admin }
+    	let admin: AdminBot;
+    	if env::var("ADMIN_USERS").is_ok() {
+	    	admin = AdminBot::new(env::var("ADMIN_USERS").unwrap());
+	    } else {
+	    	admin = AdminBot::new("@exampleuser:example.example".to_string());
+	    }
+
+    	//for now bots have to rest in the bots.json
+    	let custombots = CustomBot::newVec(std::fs::read_to_string("bots.json").unwrap().parse().unwrap());
+        Self { client, username, admin, custombots }
     }
 
     fn process_msg(&self, msg_body: String, user: String) -> String {
+		//check if message contains more than 1 char
         if !msg_body.get(..2).is_some() {
             return "".to_string()
         }
+        //is the first char a !?
         if msg_body.get(..1).unwrap() != "!" {
             return "".to_string()
         }
-        let mut tasks : std::str::SplitN<&str> = msg_body.get(1..).unwrap().splitn(2, " ");
-        let task : Option<&str> = tasks.next();
-        let rest : Option<&str> = tasks.next();
+
+        //split the message after the first char into 2 parts:
+        // the first part is the kind of bot, we want
+        // the second part is what that bot should do
+        // each bot must have those 2 things at least (optionally then there are the other arguments, the user may add)
+        let mut tasks: std::str::SplitN<&str> = msg_body.get(1..).unwrap().splitn(2, " ");
+        let task: Option<&str> = tasks.next();
+        let rest: Option<&str> = tasks.next();
         if task == None { return "".to_string() }
         let rest = match rest {
         	Some(rest) => rest.to_string(),
         	None	   => "".to_string(),
         };
         let task : &str = &task.unwrap();
+
+		//it's a work in progress, but it will result in only the custombots, I think
         let ant : String = match task {
          "dice" => {
          	DiceBot::dice(rest)
@@ -58,15 +78,32 @@ impl CommandBot {
         "admin" => {
         	self.admin.admin(rest, user)
         }
-        _ => "".to_string(),
+        _ => {
+        	self.checkCBs(task.to_string(), rest, user)
+        },
     };
 
         ant.to_string()
+    }
+    fn checkCBs(&self, task: String, rest: String, user: String) -> String {
+    	//we lop over all the bots
+    	let mut cbIter = self.custombots.iter();
+    	let mut oCbot = cbIter.next();
+    	while oCbot.is_some() {
+    		if oCbot.unwrap().name == task {
+    			return oCbot.unwrap().callCommand(task, rest, user); //hopefully find the right one
+    		};
+    		oCbot = cbIter.next();
+    	};
+    	
+    	return "no bot matched the task".to_string()
     }
 }
 
 #[async_trait]
 impl EventEmitter for CommandBot {
+
+	//event for messages
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
         if let SyncRoom::Joined(room) = room {
             let usid = user_id!("@example:localhost");
@@ -101,6 +138,9 @@ impl EventEmitter for CommandBot {
             }
         }
     }
+
+    //this is the event for the room invite
+    // by now we just join all the rooms
     async fn on_stripped_state_member(
         &self,
         room: SyncRoom,
@@ -134,6 +174,8 @@ impl EventEmitter for CommandBot {
     }
 }
 
+
+//simple login with the one bot-user
 async fn login_and_sync(
     homeserver_url: String,
     username: String,
@@ -155,6 +197,8 @@ async fn login_and_sync(
 #[tokio::main]
 async fn main() -> Result<(), matrix_sdk::Error> {
     dotenv().ok();
+    //get infos from the environment
+    //this might change later, but I am too lazy right now :D
     let homeserver: String = env::var("HOMESERVER").unwrap();
     let username: String = env::var("USERNAME").unwrap();
     let password: String = env::var("PASSWORD").unwrap();

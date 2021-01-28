@@ -993,6 +993,8 @@ dependencies = [
  "dotenv",
  "matrix-sdk",
  "rand",
+ "serde",
+ "serde_json",
  "tokio 1.0.2",
  "url",
 ]
