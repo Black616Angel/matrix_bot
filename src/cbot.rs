@@ -29,6 +29,7 @@ impl CustomBot {
 	pub fn callCommand(&self, name: String, args: String, user: String) -> String {
 
 		//get command info
+		//println!("{:?}", name);
 		let cmdo: Option<&Cmd> = self.commands.iter().find(|c| c.name == name);
 		let cmd: &Cmd;
 		match cmdo {
@@ -64,6 +65,7 @@ impl CustomBot {
 		}
 
 		//send it to the shell and catch the output
+		//println!("{:?}", comm);
 		let err = comm.output();
 		
 		//error-handling and output

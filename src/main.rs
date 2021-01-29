@@ -91,6 +91,15 @@ impl CommandBot {
     	let mut oCbot = cbIter.next();
     	while oCbot.is_some() {
     		if oCbot.unwrap().name == task {
+    				let mut command = rest.splitn(2, " ");
+    		        let task: String = match command.next() {
+    		        	Some(s) => s.to_string(),
+    		        	None	=> "".to_string(),
+    		        };
+    		        let rest: String = match command.next() {
+    		        	Some(s) => s.to_string(),
+    		        	None	=> "".to_string(),
+    		        };
     			return oCbot.unwrap().callCommand(task, rest, user); //hopefully find the right one
     		};
     		oCbot = cbIter.next();
@@ -119,16 +128,19 @@ impl EventEmitter for CommandBot {
             };
             let name = {
                     let room = room.read().await;
-                    let member = room.joined_members.get(&sender).unwrap();
-                    member.name()
+                    let member = room.joined_members.get(&sender);
+                    if member.is_some() {
+                    	member.unwrap().name()
+                    } else {
+                    	"".to_string()
+                    }
                 };
             if name == self.username {
                 return;
             }
             let response = self.process_msg(msg_body, name);
             if response != "" {
-                let content = AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(response,
-                ));
+                let content = AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(response, ));
                 // we clone here to hold the lock for as little time as possible.
                 let room_id = room.read().await.room_id.clone();
                 self.client
@@ -153,7 +165,7 @@ impl EventEmitter for CommandBot {
 
         if let SyncRoom::Invited(room) = room {
             let room = room.read().await;
-            println!("Autojoining room {}", room.room_id);
+            //println!("Autojoining room {}", room.room_id);
             let mut delay = 2;
 
             while let Err(err) = self.client.join_room_by_id(&room.room_id).await {
