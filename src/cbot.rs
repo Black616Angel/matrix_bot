@@ -1,15 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)] //for JSON
 pub struct CustomBot {
 	pub name: String,
+	pub homeserver: String,
+	pub username: String,
+	pub password: String,
 	pub commands: Vec<Cmd>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)] //for JSON
 pub struct Cmd{
 	pub name: String,
+	pub description: String,
 	pub sudo: bool,
 	pub exec: String,
 	pub need_user: bool,
@@ -17,18 +21,18 @@ pub struct Cmd{
 }
 
 impl CustomBot {
-	pub fn newVec(sJson: String) -> Vec<CustomBot> {
-		serde_json::from_str(&sJson).unwrap()
-		
+	// in the bots.json we have an array of bots so we have to do it like this:
+	pub fn new_vec(s_json: String) -> Vec<Self> {
+		serde_json::from_str(&s_json).unwrap()
 	}
+	// pub fn new(name: String, homeserver: String, username: String, password: String, commands: Vec<Cmd>) -> CustomBot {
+		// Self{ name, homeserver, username, password, commands }
+	// }
 
-	pub fn new(sJson: String) -> CustomBot {
-		serde_json::from_str(&sJson).unwrap()
-	}
-
-	pub fn callCommand(&self, name: String, args: String, user: String) -> String {
+	pub fn call_command(&self, name: String, args: String, user: String) -> String {
 
 		//get command info
+		//println!("{:?}", name);
 		let cmdo: Option<&Cmd> = self.commands.iter().find(|c| c.name == name);
 		let cmd: &Cmd;
 		match cmdo {
@@ -64,6 +68,7 @@ impl CustomBot {
 		}
 
 		//send it to the shell and catch the output
+		//println!("{:?}", comm);
 		let err = comm.output();
 		
 		//error-handling and output

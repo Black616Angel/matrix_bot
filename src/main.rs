@@ -10,38 +10,41 @@ use matrix_sdk::{
 
 };
 use tokio::time::{sleep, Duration};
+use futures::future;
 use url::Url;
 
-use std::env;
-use dotenv::dotenv;
-
-pub mod dice;
-pub mod admin;
 pub mod cbot;
-use crate::dice::DiceBot;
-use crate::admin::AdminBot;
 use crate::cbot::CustomBot;
 
-struct CommandBot {
-    client: Client,
-    username: String,
-    admin: AdminBot,
-	custombots: Vec<CustomBot>,
+struct CommandBot{
+	pub client: Client,
+	pub custombot: CustomBot,
 }
 
 impl CommandBot {
-    pub fn new(client: Client, username: String) -> Self {
-    	let admin: AdminBot;
-    	if env::var("ADMIN_USERS").is_ok() {
-	    	admin = AdminBot::new(env::var("ADMIN_USERS").unwrap());
-	    } else {
-	    	admin = AdminBot::new("@exampleuser:example.example".to_string());
-	    }
-
-    	//for now bots have to rest in the bots.json
-    	let custombots = CustomBot::newVec(std::fs::read_to_string("bots.json").unwrap().parse().unwrap());
-        Self { client, username, admin, custombots }
-    }
+	pub async fn new_vec(bots_json: String) -> Vec<Client> {
+    	let mut bots = CustomBot::new_vec(bots_json);
+		let mut ret: Vec<Client> = Vec::new();
+		//we loop over all the bots in the JSON
+		let mut o_custombot = bots.pop();
+		while o_custombot.is_some() {
+			let custombot = o_custombot.unwrap();
+			//build the username: @username:matrix.example.com
+		    let uname = "@".to_string() + &custombot.username + &":".to_string() + &(custombot.homeserver.to_string().replace("https://matrix.", ""));
+		    let homeserver_url = Url::parse(&custombot.homeserver).expect("Couldn't parse the homeserver URL");
+		    
+		    //now create the client
+		    let mut client = Client::new(homeserver_url).unwrap();
+		    //enter username, password, idc, devicename
+		    client.login(&uname, &custombot.password, None, Some("command bot")).await.unwrap();
+		    client.sync_once(SyncSettings::default()).await.unwrap();
+		    //make new bot the event handler
+		    client.add_event_emitter(Box::new(Self{ client: client.clone(), custombot })).await;
+			ret.push( client );
+			o_custombot = bots.pop();
+		}
+		return ret
+	}
 
     fn process_msg(&self, msg_body: String, user: String) -> String {
 		//check if message contains more than 1 char
@@ -67,36 +70,22 @@ impl CommandBot {
         };
         let task : &str = &task.unwrap();
 
-		//it's a work in progress, but it will result in only the custombots, I think
-        let ant : String = match task {
-         "dice" => {
-         	DiceBot::dice(rest)
-        },
-        "roll" => {
-         	DiceBot::roll(rest)
-        },
-        "admin" => {
-        	self.admin.admin(rest, user)
-        }
-        _ => {
-        	self.checkCBs(task.to_string(), rest, user)
-        },
-    };
-
-        ant.to_string()
+		self.check_cb(task.to_string(), rest, user)
     }
-    fn checkCBs(&self, task: String, rest: String, user: String) -> String {
-    	//we lop over all the bots
-    	let mut cbIter = self.custombots.iter();
-    	let mut oCbot = cbIter.next();
-    	while oCbot.is_some() {
-    		if oCbot.unwrap().name == task {
-    			return oCbot.unwrap().callCommand(task, rest, user); //hopefully find the right one
-    		};
-    		oCbot = cbIter.next();
-    	};
-    	
-    	return "no bot matched the task".to_string()
+    fn check_cb(&self, task: String, rest: String, user: String) -> String {
+   		if self.custombot.name == task {
+			let mut command = rest.splitn(2, " ");
+	        let task: String = match command.next() {
+	        	Some(s) => s.to_string(),
+	        	None	=> "".to_string(),
+	        };
+	        let rest: String = match command.next() {
+	        	Some(s) => s.to_string(),
+	        	None	=> "".to_string(),
+	        };
+  			return self.custombot.call_command(task, rest, user);
+   		};
+    	return "".to_string()
     }
 }
 
@@ -119,16 +108,19 @@ impl EventEmitter for CommandBot {
             };
             let name = {
                     let room = room.read().await;
-                    let member = room.joined_members.get(&sender).unwrap();
-                    member.name()
+                    let member = room.joined_members.get(&sender);
+                    if member.is_some() {
+                    	member.unwrap().name()
+                    } else {
+                    	"".to_string()
+                    }
                 };
-            if name == self.username {
+            if name == self.custombot.username {
                 return;
             }
             let response = self.process_msg(msg_body, name);
             if response != "" {
-                let content = AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(response,
-                ));
+                let content = AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(response, ));
                 // we clone here to hold the lock for as little time as possible.
                 let room_id = room.read().await.room_id.clone();
                 self.client
@@ -153,7 +145,7 @@ impl EventEmitter for CommandBot {
 
         if let SyncRoom::Invited(room) = room {
             let room = room.read().await;
-            println!("Autojoining room {}", room.room_id);
+            //println!("Autojoining room {}", room.room_id);
             let mut delay = 2;
 
             while let Err(err) = self.client.join_room_by_id(&room.room_id).await {
@@ -174,34 +166,17 @@ impl EventEmitter for CommandBot {
     }
 }
 
-
-//simple login with the one bot-user
-async fn login_and_sync(
-    homeserver_url: String,
-    username: String,
-    password: String,
-) -> Result<(), matrix_sdk::Error> {
-    let uname = "@".to_string() + &username + &":".to_string() + &(homeserver_url.to_string().replace("https://matrix.", ""));
-    let homeserver_url = Url::parse(&homeserver_url).expect("Couldn't parse the homeserver URL");
-    let mut client = Client::new(homeserver_url).unwrap();
-
-    client.login(&username, &password, None, Some("command bot")).await?;
-    client.sync_once(SyncSettings::default()).await.unwrap();
-    client.add_event_emitter(Box::new(CommandBot::new(client.clone(), uname))).await;
-    let settings = SyncSettings::default().token(client.sync_token().await.unwrap());
-    client.sync(settings).await;
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<(), matrix_sdk::Error> {
-    dotenv().ok();
-    //get infos from the environment
-    //this might change later, but I am too lazy right now :D
-    let homeserver: String = env::var("HOMESERVER").unwrap();
-    let username: String = env::var("USERNAME").unwrap();
-    let password: String = env::var("PASSWORD").unwrap();
-    login_and_sync(homeserver, username, password).await?;
+    //for now bots have to rest in the bots.json
+	let bots_json = std::fs::read_to_string("bots.json").unwrap().parse().unwrap();
+	let clients = CommandBot::new_vec(bots_json).await;
+	let mut f_clients: Vec<future::BoxFuture<()>> = Vec::new();
+	for client in clients.iter() {
+		let settings = SyncSettings::default().token(client.sync_token().await.unwrap());
+		f_clients.push(Box::pin(client.sync(settings)));
+	}
+	future::join_all(f_clients).await;
+	
     Ok(())
 }

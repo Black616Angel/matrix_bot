@@ -990,7 +990,7 @@ dependencies = [
 name = "matrix_bot"
 version = "0.1.0"
 dependencies = [
- "dotenv",
+ "futures",
  "matrix-sdk",
  "rand",
  "serde",
