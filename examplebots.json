@@ -3,6 +3,9 @@
 [
 	{
 		"name": "example",
+		"homserver": "https://matrix.matrix.org",
+		"username": "username",
+		"password": "123456",
 		"commands": [
 			{
 				"name": "print",
